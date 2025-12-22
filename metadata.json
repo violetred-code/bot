@@ -1,0 +1,7 @@
+{
+  "name": "Liquid Glass AI Bot",
+  "description": "A futuristic chat interface featuring a central 3D-styled liquid glass bot avatar, glassmorphism UI, and real-time AI interaction powered by Gemini.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
