@@ -4,7 +4,7 @@ import BotAvatar from './components/BotAvatar';
 import ChatMessage from './components/ChatMessage';
 import ChatInput from './components/ChatInput';
 import { Message, BotState, AppPhase } from './types';
-import { sendMessageToGemini } from './services/geminiService';
+import { sendMessageToDify } from './services/difyService';
 
 const Typewriter: React.FC<{ text: string }> = ({ text }) => {
   const [currentText, setCurrentText] = useState('');
@@ -26,6 +26,9 @@ const Typewriter: React.FC<{ text: string }> = ({ text }) => {
 const App: React.FC = () => {
   const [phase, setPhase] = useState<AppPhase>('waiting');
   const [messages, setMessages] = useState<Message[]>([]);
+  const [streamingContent, setStreamingContent] = useState<string>(''); // Active streaming buffer
+  const [isStreaming, setIsStreaming] = useState(false);
+
   const [botState, setBotState] = useState<BotState>('idle');
   const [showIntroUI, setShowIntroUI] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -47,10 +50,10 @@ const App: React.FC = () => {
     if (scrollRef.current) {
       scrollRef.current.scrollTo({
         top: scrollRef.current.scrollHeight,
-        behavior: 'smooth',
+        behavior: botState === 'speaking' ? 'auto' : 'smooth',
       });
     }
-  }, [messages, botState]);
+  }, [messages, botState, streamingContent]);
 
   const handleSendMessage = async (text: string) => {
     if (phase === 'intro') {
@@ -67,18 +70,58 @@ const App: React.FC = () => {
     setMessages((prev) => [...prev, userMessage]);
     setBotState('thinking');
 
-    const aiResponseText = await sendMessageToGemini(text);
+    // Start streaming: prepare state
+    setStreamingContent('');
+    setIsStreaming(true);
 
-    const aiMessage: Message = {
-      id: (Date.now() + 1).toString(),
-      role: 'assistant',
-      content: aiResponseText,
-      timestamp: Date.now(),
-    };
+    // Use a local variable to accumulate text for the final commit.
+    // This avoids closure staleness issues with the `streamingContent` state.
+    let fullContentAccumulator = "";
 
-    setBotState('speaking');
-    setMessages((prev) => [...prev, aiMessage]);
-    setTimeout(() => setBotState('idle'), 2000);
+    await sendMessageToDify(
+      text,
+      (chunk) => {
+        // On first chunk, if we are still 'thinking', switch to 'speaking'
+        setBotState((current) => current === 'thinking' ? 'speaking' : current);
+
+        fullContentAccumulator += chunk;
+        setStreamingContent(prev => prev + chunk);
+      },
+      () => {
+        // On complete
+        setBotState('idle');
+        setIsStreaming(false);
+        setStreamingContent(''); // Clear buffer
+
+        // Commit actual message to history
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: Date.now().toString(),
+            role: 'assistant',
+            content: fullContentAccumulator,
+            timestamp: Date.now(),
+          },
+        ]);
+      },
+      (error) => {
+        console.error("Dify Error:", error);
+        setBotState('idle');
+        setIsStreaming(false);
+        setStreamingContent('');
+
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: Date.now().toString(),
+            role: 'assistant',
+            content: `Sorry, I encountered an error connecting to my brain. (${error.message || "Unknown Error"})`,
+            timestamp: Date.now(),
+          },
+        ]);
+      }
+    );
+
   };
 
   const resetChat = () => {
@@ -188,7 +231,20 @@ const App: React.FC = () => {
           {messages.map((msg) => (
             <ChatMessage key={msg.id} message={msg} />
           ))}
-          {botState === 'thinking' && (
+
+          {/* Active Streaming Message */}
+          {isStreaming && (
+            <ChatMessage
+              message={{
+                id: 'streaming-temp',
+                role: 'assistant',
+                content: streamingContent,
+                timestamp: Date.now()
+              }}
+            />
+          )}
+
+          {botState === 'thinking' && !isStreaming && (
             <div className="flex justify-start px-4">
               <div className="glass-effect px-5 py-3 rounded-2xl rounded-tl-none flex items-center gap-2">
                 <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce [animation-delay:-0.3s]"></div>

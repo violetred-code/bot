@@ -39,8 +39,8 @@ const BotAvatar: React.FC<BotAvatarProps> = ({ state, className = '', isSmall = 
 
       {/* Bot Icon (GIF) */}
       <div className={`relative w-[90%] h-[90%] flex items-center justify-center transition-all duration-700 pointer-events-none ${isThinking ? 'scale-110 rotate-3' :
-          isSpeaking ? 'scale-105' :
-            'scale-100 animate-float'
+        isSpeaking ? 'scale-105' :
+          'scale-100 animate-float'
         }`}>
         <img
           src="/mustaien2.gif"
@@ -88,4 +88,4 @@ const BotAvatar: React.FC<BotAvatarProps> = ({ state, className = '', isSmall = 
   );
 };
 
-export default BotAvatar;
+export default React.memo(BotAvatar);
