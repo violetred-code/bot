@@ -31,17 +31,30 @@ const App: React.FC = () => {
 
   const [botState, setBotState] = useState<BotState>('idle');
   const [showIntroUI, setShowIntroUI] = useState(false);
-  const [showDropdown, setShowDropdown] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Phase 1 -> 2 Transition (5 seconds)
+  // Phase 1 -> 2 Transition (5 seconds) & Progress Timer
   useEffect(() => {
     if (phase === 'waiting') {
-      const timer = setTimeout(() => {
-        setPhase('intro');
-        setTimeout(() => setShowIntroUI(true), 1100);
-      }, 5000);
-      return () => clearTimeout(timer);
+      const startTime = Date.now();
+      const duration = 5000;
+
+      const interval = setInterval(() => {
+        const elapsed = Date.now() - startTime;
+        const currentProgress = Math.min(Math.round((elapsed / duration) * 100), 100);
+        setProgress(currentProgress);
+
+        if (elapsed >= duration) {
+          clearInterval(interval);
+          setPhase('intro');
+          setTimeout(() => setShowIntroUI(true), 1100);
+        }
+      }, 50);
+
+      return () => clearInterval(interval);
     }
   }, [phase]);
 
@@ -75,25 +88,19 @@ const App: React.FC = () => {
     setIsStreaming(true);
 
     // Use a local variable to accumulate text for the final commit.
-    // This avoids closure staleness issues with the `streamingContent` state.
     let fullContentAccumulator = "";
 
     await sendMessageToDify(
       text,
       (chunk) => {
-        // On first chunk, if we are still 'thinking', switch to 'speaking'
         setBotState((current) => current === 'thinking' ? 'speaking' : current);
-
         fullContentAccumulator += chunk;
         setStreamingContent(prev => prev + chunk);
       },
       () => {
-        // On complete
         setBotState('idle');
         setIsStreaming(false);
-        setStreamingContent(''); // Clear buffer
-
-        // Commit actual message to history
+        setStreamingContent('');
         setMessages((prev) => [
           ...prev,
           {
@@ -109,7 +116,6 @@ const App: React.FC = () => {
         setBotState('idle');
         setIsStreaming(false);
         setStreamingContent('');
-
         setMessages((prev) => [
           ...prev,
           {
@@ -121,158 +127,253 @@ const App: React.FC = () => {
         ]);
       }
     );
-
   };
 
   const resetChat = () => {
-    setPhase('waiting');
+    setPhase('intro');
     setMessages([]);
     setBotState('idle');
-    setShowIntroUI(false);
-    setShowDropdown(false);
+    setShowIntroUI(true);
+    setProgress(100);
   };
 
-  // Bot Container Style based on phase
   const getBotStyle = (): React.CSSProperties => {
     switch (phase) {
       case 'waiting':
         return {
-          top: '50%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
-          width: '500px',
-          height: '500px',
+          top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+          width: '500px', height: '500px',
         };
       case 'intro':
         return {
-          top: '35%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
-          width: '320px',
-          height: '320px',
+          top: '35%', left: '50%', transform: 'translate(-50%, -50%)',
+          width: '320px', height: '320px',
         };
       case 'chatting':
         return {
-          top: '40px',
-          left: '112px',
+          top: '56px',
+          left: '50px',
           transform: 'translate(-50%, -50%)',
-          width: '48px',
-          height: '48px',
+          width: '44px',
+          height: '44px',
+          cursor: isSidebarCollapsed ? 'pointer' : 'default',
+          pointerEvents: 'auto',
         };
       default:
         return {};
     }
   };
 
+  const sidebarWidth = isSidebarCollapsed ? '72px' : '280px';
+
   return (
-    <div className="relative h-screen w-full flex flex-col items-center overflow-hidden liquid-bg">
+    <div className="relative h-screen w-full flex overflow-hidden liquid-bg">
 
-      {/* Dynamic Bot Avatar Container */}
-      <div
-        className="fixed z-50 transition-all duration-1000 ease-in-out pointer-events-none"
-        style={getBotStyle()}
-      >
-        <BotAvatar state={botState} isSmall={phase === 'chatting'} />
-      </div>
-
-      {/* Phase 3 Header (Transparent) */}
-      <header className={`fixed top-0 left-0 w-full h-20 z-40 transition-all duration-1000 flex items-center px-6 md:px-24 ${phase === 'chatting' ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0 pointer-events-none'
-        }`}>
-        <div className="flex items-center gap-4 ml-16 md:ml-16">
-          <h1 className="text-lg font-semibold text-slate-800 tracking-tight">
-            Next-Gen AI Assistant
-          </h1>
-
-          <div className="relative">
-            <button
-              onClick={() => setShowDropdown(!showDropdown)}
-              className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-500"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-              </svg>
-            </button>
-
-            {showDropdown && (
-              <div className="absolute top-full left-0 mt-2 w-48 bg-white border border-slate-100 rounded-xl shadow-xl py-2 z-50 animate-in fade-in slide-in-from-top-2">
-                <div className="px-4 py-2 text-xs font-bold text-slate-400 uppercase tracking-widest">History</div>
-                <button className="w-full text-left px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-indigo-400" />
-                  Previous Chat #1
-                </button>
-                <div className="my-1 border-t border-slate-50" />
-                <button
-                  onClick={resetChat}
-                  className="w-full text-left px-4 py-2 text-sm text-indigo-600 hover:bg-indigo-50 font-medium"
-                >
-                  + New Chat
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      </header>
-
-      {/* Intro UI Layer (Phase 2) */}
-      <div className={`fixed top-[55%] left-1/2 -translate-x-1/2 flex flex-col items-center z-30 transition-all duration-700 ${phase === 'intro' && showIntroUI ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'
-        }`}>
-        <div className="text-2xl font-medium text-slate-700 h-10">
-          {phase === 'intro' && showIntroUI && <Typewriter text="Hello, I'm MUSTAIEN." />}
-        </div>
-      </div>
-
-      {/* Chat History Layer (Phase 3) */}
-      <div
-        ref={scrollRef}
-        className={`flex-1 w-full max-w-4xl mx-auto overflow-y-auto z-10 px-4 pt-24 pb-32 transition-opacity duration-1000 ${phase === 'chatting' ? 'opacity-100' : 'opacity-0 pointer-events-none'
+      {/* Sidebar (Phase 3) */}
+      <aside
+        style={{ width: phase === 'chatting' ? sidebarWidth : '280px' }}
+        className={`h-[calc(100%-32px)] m-4 bg-white/20 backdrop-blur-2xl border border-white/30 shadow-[0_10px_40px_-10px_rgba(31,38,135,0.15)] rounded-[32px] flex flex-col z-40 transition-all duration-500 ease-in-out ${phase === 'chatting' ? 'translate-x-0' : '-translate-x-[110%]'
           }`}
       >
-        <div className="flex flex-col space-y-4">
-          {messages.map((msg) => (
-            <ChatMessage key={msg.id} message={msg} />
-          ))}
+        {/* Sidebar Header */}
+        <div className="p-4 flex items-center justify-between h-[80px]">
+          {!isSidebarCollapsed ? (
+            <>
+              <div className="flex flex-col ml-12 animate-in fade-in duration-300">
+                <span className="text-[14px] font-bold text-slate-800 leading-tight tracking-tight">MUSTAINE</span>
+                <span className="text-[12px] font-medium text-slate-500 leading-tight">Next-Gen WebUI</span>
+              </div>
+              <button
+                onClick={() => setIsSidebarCollapsed(true)}
+                className="text-slate-400 hover:text-[#635BFF] transition-colors p-2 rounded-xl hover:bg-white/40"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 12h16M4 18h7" />
+                </svg>
+              </button>
+            </>
+          ) : null}
+        </div>
 
-          {/* Active Streaming Message */}
-          {isStreaming && (
-            <ChatMessage
-              message={{
-                id: 'streaming-temp',
-                role: 'assistant',
-                content: streamingContent,
-                timestamp: Date.now()
-              }}
-            />
-          )}
+        {/* Sidebar Menu Items */}
+        <div className="flex-1 overflow-y-auto px-3 space-y-1 py-4 scrollbar-hide">
+          <button onClick={resetChat} className="w-full h-11 flex items-center gap-3 px-3 py-2 text-[15px] font-medium text-slate-700 hover:bg-white/40 hover:text-[#635BFF] rounded-xl transition-all group overflow-hidden">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 shrink-0 text-slate-400 group-hover:text-[#635BFF]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+            {!isSidebarCollapsed && <span className="animate-in fade-in slide-in-from-left-2 truncate font-semibold">새 채팅</span>}
+          </button>
 
-          {botState === 'thinking' && !isStreaming && (
-            <div className="flex justify-start px-4">
-              <div className="glass-effect px-5 py-3 rounded-2xl rounded-tl-none flex items-center gap-2">
-                <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-                <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-                <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce"></div>
+          <button className="w-full h-11 flex items-center gap-3 px-3 py-2 text-[15px] font-medium text-slate-700 hover:bg-white/40 hover:text-[#635BFF] rounded-xl transition-all group overflow-hidden">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 shrink-0 text-slate-400 group-hover:text-[#635BFF]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            {!isSidebarCollapsed && <span className="animate-in fade-in slide-in-from-left-2 truncate">검색</span>}
+          </button>
+
+          <button className="w-full h-11 flex items-center gap-3 px-3 py-2 text-[15px] font-medium text-slate-700 hover:bg-white/40 hover:text-[#635BFF] rounded-xl transition-all group overflow-hidden">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 shrink-0 text-slate-400 group-hover:text-[#635BFF]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            {!isSidebarCollapsed && <span className="animate-in fade-in slide-in-from-left-2 truncate">노트</span>}
+          </button>
+
+          {!isSidebarCollapsed && (
+            <div className="animate-in fade-in duration-500">
+              <div className="pt-6 pb-2">
+                <span className="px-3 text-[11px] font-bold text-slate-400 uppercase tracking-widest">대화 요약</span>
+              </div>
+
+              {/* History Items - Active at Top */}
+              <div className="space-y-1 mt-1">
+                {['현재 진행 중인 채팅', '👋 Hello', '📅 Days Left in 2023', '📊 HR 대시보드 구성 요소', '👋 Welcome Message'].map((item, idx) => (
+                  <button
+                    key={idx}
+                    className={`group w-full flex items-center gap-2 px-3 py-2.5 text-[14px] rounded-xl text-left truncate transition-all ${idx === 0
+                      ? 'bg-white text-[#635BFF] font-bold shadow-[0_4px_12px_-2px_rgba(99,91,255,0.15)] ring-1 ring-[#635BFF]/10'
+                      : 'text-slate-600 hover:bg-white/50 hover:text-[#635BFF]'
+                      }`}
+                  >
+                    <span className="truncate">{item}</span>
+                  </button>
+                ))}
               </div>
             </div>
           )}
         </div>
-      </div>
 
-      {/* Input Layer (Phase 2 & 3) */}
-      <div className={`fixed bottom-0 left-0 w-full flex justify-center z-30 transition-all duration-1000 ${(phase === 'intro' && showIntroUI) || phase === 'chatting'
-        ? 'translate-y-0 opacity-100'
-        : 'translate-y-full opacity-0'
-        }`}>
-        <ChatInput
-          onSendMessage={handleSendMessage}
-          disabled={botState === 'thinking'}
-        />
-      </div>
+        {/* User Profile Section */}
+        <div className={`p-4 border-t border-white/10 bg-white/10 relative ${isSidebarCollapsed ? 'flex justify-center' : ''}`}>
+          {showProfileMenu && (
+            <div className="absolute bottom-full left-4 mb-2 w-48 bg-white/90 backdrop-blur-xl border border-white/50 rounded-2xl shadow-xl p-1 z-50 animate-in fade-in slide-in-from-bottom-2">
+              <button className="w-full text-left px-3 py-2 text-[13px] font-medium text-slate-700 hover:bg-[#635BFF]/10 hover:text-[#635BFF] rounded-xl transition-all flex items-center gap-2 group">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-slate-400 group-hover:text-[#635BFF]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                설정
+              </button>
+              <button onClick={() => window.location.reload()} className="w-full text-left px-3 py-2 text-[13px] font-medium text-red-500 hover:bg-red-50 rounded-xl transition-all flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+                로그아웃
+              </button>
+            </div>
+          )}
+          <div
+            onClick={() => setShowProfileMenu(!showProfileMenu)}
+            className={`p-2 rounded-2xl hover:bg-white/40 transition-all cursor-pointer flex items-center ${isSidebarCollapsed ? 'justify-center border border-white/20' : 'gap-3 border border-white/20 shadow-sm bg-white/5 mx-1'}`}
+          >
+            <div className="w-9 h-9 rounded-full overflow-hidden border-2 border-white/50 shadow-sm shrink-0">
+              <img
+                src="https://api.dicebear.com/7.x/avataaars/svg?seed=Judha"
+                alt="Profile"
+                className="w-full h-full object-cover"
+              />
+            </div>
+            {!isSidebarCollapsed && (
+              <div className="flex-1 min-w-0 animate-in fade-in duration-300">
+                <p className="text-[13px] font-bold text-slate-800 truncate">Judha Maygustya</p>
+                <p className="text-[10px] text-slate-500 truncate font-medium">judha.design@gmail.com</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </aside>
 
-      {/* Aesthetic Background Elements */}
-      <div className="absolute top-0 left-0 w-full h-full -z-10 pointer-events-none">
-        <div className="absolute -top-24 -left-24 w-[500px] h-[500px] bg-indigo-200/20 rounded-full blur-[120px]" />
-        <div className="absolute top-1/2 -right-24 w-[500px] h-[500px] bg-purple-200/20 rounded-full blur-[120px]" />
-        <div className="absolute -bottom-24 left-1/4 w-[500px] h-[500px] bg-pink-100/10 rounded-full blur-[120px]" />
-      </div>
+      {/* Main Content Area */}
+      <main className="flex-1 relative flex flex-col items-center overflow-hidden">
+
+        {/* Bot Avatar */}
+        <div
+          onClick={() => isSidebarCollapsed && setIsSidebarCollapsed(false)}
+          className="fixed z-50 transition-all duration-700 ease-in-out"
+          style={getBotStyle()}
+        >
+          <BotAvatar state={botState} isSmall={phase === 'chatting'} />
+
+          {/* Loading Counter (Phase 1 only) */}
+          {phase === 'waiting' && (
+            <div className="absolute top-[110%] left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 w-full animate-in fade-in zoom-in duration-500">
+              <div className="text-4xl font-light text-indigo-600/80 tracking-widest font-mono">
+                {progress}<span className="text-xl ml-1">%</span>
+              </div>
+              <div className="w-48 h-[2px] bg-indigo-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-indigo-500 transition-all duration-100 ease-out"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Intro UI Layer (Phase 2) */}
+        <div className={`fixed top-[55%] left-1/2 -translate-x-1/2 flex flex-col items-center z-30 transition-all duration-700 ${phase === 'intro' && showIntroUI ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'
+          }`}>
+          <div className="text-2xl font-medium text-slate-700 h-10">
+            {phase === 'intro' && showIntroUI && <Typewriter text="Hello, I'm MUSTAIEN." />}
+          </div>
+        </div>
+
+        {/* Chat History Area (Phase 3) */}
+        <div
+          ref={scrollRef}
+          className={`flex-1 w-full max-w-4xl mx-auto overflow-y-auto z-10 px-4 pt-8 pb-32 transition-opacity duration-1000 ${phase === 'chatting' ? 'opacity-100' : 'opacity-0 pointer-events-none'
+            }`}
+        >
+          <div className="flex flex-col space-y-4">
+            {messages.map((msg) => (
+              <ChatMessage key={msg.id} message={msg} />
+            ))}
+
+            {/* Active Streaming Message */}
+            {isStreaming && (
+              <ChatMessage
+                message={{
+                  id: 'streaming-temp',
+                  role: 'assistant',
+                  content: streamingContent,
+                  timestamp: Date.now()
+                }}
+              />
+            )}
+
+            {botState === 'thinking' && !isStreaming && (
+              <div className="flex justify-start px-4">
+                <div className="glass-effect px-5 py-3 rounded-2xl rounded-tl-none flex items-center gap-3">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 bg-[#635BFF] rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                    <div className="w-2 h-2 bg-[#635BFF] rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                    <div className="w-2 h-2 bg-[#635BFF] rounded-full animate-bounce"></div>
+                  </div>
+                  <span className="text-sm font-medium text-[#635BFF]/70 animate-pulse">MUSTAIEN is typing...</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Input Layer (Phase 2 & 3) */}
+        <div className={`fixed bottom-0 right-0 w-full flex justify-center z-30 transition-all duration-700 ${(phase === 'intro' && showIntroUI) || phase === 'chatting'
+          ? 'translate-y-0 opacity-100'
+          : 'translate-y-full opacity-0'
+          }`}
+          style={{ width: phase === 'chatting' ? `calc(100% - ${sidebarWidth} - 32px)` : '100%' }}>
+          <ChatInput
+            onSendMessage={handleSendMessage}
+            disabled={botState === 'thinking'}
+          />
+        </div>
+
+        {/* Aesthetic Background Elements */}
+        <div className="absolute top-0 left-0 w-full h-full -z-10 pointer-events-none">
+          <div className="absolute -top-24 -left-24 w-[500px] h-[500px] bg-indigo-200/20 rounded-full blur-[120px]" />
+          <div className="absolute top-1/2 -right-24 w-[500px] h-[500px] bg-purple-200/20 rounded-full blur-[120px]" />
+          <div className="absolute -bottom-24 left-1/4 w-[500px] h-[500px] bg-pink-100/10 rounded-full blur-[120px]" />
+        </div>
+      </main>
 
       <style>{`
         .scrollbar-hide::-webkit-scrollbar {

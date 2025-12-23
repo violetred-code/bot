@@ -21,7 +21,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, disabled }) => {
     <div className="w-full max-w-4xl px-4 pb-8">
       <form
         onSubmit={handleSubmit}
-        className="glass-effect rounded-full p-2 pl-6 flex items-center gap-4 transition-all focus-within:ring-2 focus-within:ring-indigo-400/50 shadow-[0_10px_40px_-10px_rgba(31,38,135,0.2)] border-white/50"
+        className="glass-effect rounded-full p-2 pl-6 flex items-center gap-4 transition-all focus-within:ring-2 focus-within:ring-[#635BFF]/30 shadow-[0_10px_40px_-10px_rgba(31,38,135,0.15)] border-white/50"
       >
         <input
           type="text"
@@ -35,8 +35,8 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, disabled }) => {
           type="submit"
           disabled={!text.trim() || disabled}
           className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${text.trim() && !disabled
-              ? 'bg-indigo-500 text-white shadow-lg hover:bg-indigo-600 scale-100'
-              : 'bg-gray-100 text-gray-400 scale-95 opacity-50 cursor-not-allowed'
+            ? 'bg-[#635BFF] text-white shadow-[0_4px_15px_-3px_rgba(99,91,255,0.4)] hover:bg-[#5249E6] scale-100 active:scale-95'
+            : 'bg-gray-100 text-gray-400 scale-95 opacity-50 cursor-not-allowed'
             }`}
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 rotate-45" fill="none" viewBox="0 0 24 24" stroke="currentColor">
